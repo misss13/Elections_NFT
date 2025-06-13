@@ -1,0 +1,107 @@
+1: Uruchomienie środowiska
+anvil
+# Uruchomienie lokalnego blockchaina
+
+export PRIVATE_KEY="..."
+# Ustawienie klucza prywatnego admina
+
+export RPC_URL="http://localhost:8545"
+# Ustawienie adresu RPC
+
+2: Deploy kontraktów
+forge script script/Deploy.sol:DeployMPTokenFactory --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast
+# Deploy fabryki tokenów MP
+
+export FACTORY_ADDRESS="0x5FbDB2315678afecb367f032d93F642f64180aa3"
+# Ustaw adres fabryki z outputu
+
+export MP_FACTORY_ADDRESS=$FACTORY_ADDRESS
+forge script script/DeployMPVoting.sol:DeployMPVoting --rpc-url $RPC_URL --broadcast
+# Deploy kontraktu głosowania
+
+export VOTING_ADDRESS="0xc6e7DF5E7b4f2A278906862b61205850344D4e7d"
+# Ustaw adres głosowania z outputu
+
+3: Tworzenie NFT dla MP
+forge script script/CreateMPTokensForAnvil.sol:CreateMPTokensForAnvil --rpc-url $RPC_URL --broadcast
+# Tworzy NFT dla kont MP
+
+cast call $FACTORY_ADDRESS "getMPTokenCount()" --rpc-url $RPC_URL
+# Sprawdź ile tokenów MP zostało utworzonych
+
+4: Sprawdzenie sald
+cast balance <adres> --rpc-url $RPC_URL --ether
+# Sprawdź saldo w ETH (powtórz dla każdego konta)
+
+5: Tworzenie pytań z mechanizmem stakowania
+cast send --rpc-url $RPC_URL --private-key $PRIVATE_KEY $VOTING_ADDRESS "createQuestion(string,uint256,uint256)" "..." <start> <end>
+# Tworzy pytanie do głosowania
+
+cast call $VOTING_ADDRESS "questionCount()" --rpc-url $RPC_URL
+# Sprawdzenie liczby pytań
+
+6: Czekanie na start głosowania
+sleep 300
+# Czekaj 5 minut
+
+7: Głosowanie MP z 0.01 ETH stake
+cast send --rpc-url $RPC_URL --private-key <klucz_MP> $VOTING_ADDRESS "vote(uint256,uint256)" "1" "<0/1/2>" --value 0.01ether
+# Głosowanie: 0 = TAK, 1 = NIE, 2 = WSTRZYMUJE SIĘ
+
+8: Sprawdzanie statusu głosowania
+cast call $VOTING_ADDRESS "getYesVotesCount(uint256)" "1" --rpc-url $RPC_URL
+# Liczba głosów TAK
+
+cast call $VOTING_ADDRESS "getNoVotesCount(uint256)" "1" --rpc-url $RPC_URL
+# Liczba głosów NIE
+
+cast call $VOTING_ADDRESS "getAllVoteCounts(uint256)" "1" --rpc-url $RPC_URL
+# Liczba głosów łącznie
+
+cast call $VOTING_ADDRESS "getQuestionDetails(uint256)" "1" --rpc-url $RPC_URL
+# Szczegóły pytania
+
+cast call $VOTING_ADDRESS "getStakeInfo(uint256,address)" "1" "<adres>" --rpc-url $RPC_URL
+# Sprawdzenie stake dla konkretnego konta
+
+9: Zamykanie głosowania
+sleep 3700
+# Czekanie do końca głosowania
+
+cast send --rpc-url $RPC_URL --private-key $PRIVATE_KEY $VOTING_ADDRESS "closeQuestion(uint256)" "1"
+# Zamknięcie pytania
+
+10: Sprawdzenie wyników
+cast call $VOTING_ADDRESS "getVotingResults(uint256)" "1" --rpc-url $RPC_URL
+# Wynik głosowania
+
+cast call $VOTING_ADDRESS "checkVote(uint256,address)" "1" "<adres>" --rpc-url $RPC_URL
+# Sprawdzenie jak głosował dany adres
+
+11: Odbiór stake
+cast send --rpc-url $RPC_URL --private-key <klucz> $VOTING_ADDRESS "claimStake(uint256)" "1"
+# Odbiór stake (100% dla wygranych, 50% dla przegranych)
+
+12: Demonstracje błędów
+cast send --rpc-url $RPC_URL --private-key <klucz> $VOTING_ADDRESS "vote(uint256,uint256)" "2" "0" --value 0.01ether
+# Głos bez NFT - powinno się nie powieść
+
+cast send --rpc-url $RPC_URL --private-key <klucz> $VOTING_ADDRESS "vote(uint256,uint256)" "2" "0" --value 0.005ether
+# Zły stake - błąd
+
+cast send --rpc-url $RPC_URL --private-key <klucz> $VOTING_ADDRESS "vote(uint256,uint256)" "1" "0" --value 0.01ether
+# Powtórne głosowanie - błąd
+
+13: Funkcje administratora
+cast send --rpc-url $RPC_URL --private-key $PRIVATE_KEY $VOTING_ADDRESS "addAdmin(address)" "<adres>"
+# Dodanie nowego administratora
+
+cast call $VOTING_ADDRESS "isAdmin(address)" "<adres>" --rpc-url $RPC_URL
+# Sprawdzenie czy adres to admin
+
+cast call $VOTING_ADDRESS "isValidMPVoter(address)" "<adres>" --rpc-url $RPC_URL
+# Sprawdzenie czy adres to MP z ważnym NFT
+
+14: Podsumowanie finansowe
+cast balance <adres> --rpc-url $RPC_URL --ether
+# Sprawdzenie końcowych sald
