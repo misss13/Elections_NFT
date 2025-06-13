@@ -1,6 +1,6 @@
 # NFT Voting System
 
-Blockchain-based voting system for MPs with NFT identity verification and 100 ETH staking mechanism.
+Blockchain-based voting system for MPs with NFT identity verification and staking
 
 ## Prerequisites
 
