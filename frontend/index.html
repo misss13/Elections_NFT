@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MP Voting System with Staking</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.10.0/web3.min.js"></script>
+</head>
+<body>
+    <div>
+        <h1>MP Voting System with Staking</h1>
+        <div>
+            <h2>Connection Status</h2>
+            <div id="connectionStatus">Disconnected</div>
+            <button onclick="connectWallet()">Connect Wallet</button>
+            <button onclick="switchToAnvil()">Switch to Anvil</button>
+            <div>
+                <label>Account: </label>
+                <span id="currentAccount">Not connected</span>
+            </div>
+            <div>
+                <label>Balance: </label>
+                <span id="accountBalance">0 ETH</span>
+            </div>
+            <div>
+                <label>Blockchain Time: </label>
+                <span id="blockchainTime">Not connected</span>
+                <button onclick="updateBlockchainTime()">Refresh Time</button>
+            </div>
+        </div>
+        <div>
+            <h2>Contract Configuration</h2>
+            <div>
+                <label>MP Token Factory Address:</label>
+                <input type="text" id="factoryAddress" placeholder="0x..." value="0x5fbdb2315678afecb367f032d93f642f64180aa3" style="width: 400px;">
+            </div>
+            <div>
+                <label>MP Voting Contract Address:</label>
+                <input type="text" id="votingAddress" placeholder="0x..." value="0xe7f1725e7734ce288f8367e1bb143e90bb3f0512" style="width: 400px;">
+            </div>
+            <button onclick="initializeContracts()">Initialize Contracts</button>
+            <div id="contractStatus"></div>
+        </div>
+        <div>
+            <h2>Admin Functions</h2>
+            <div id="adminStatus"></div>
+            <h3>Create MP Token</h3>
+            <div>
+                <div>
+                    <input type="text" id="mpRecipient" placeholder="Recipient Address" style="width: 100%;">
+                    <input type="text" id="mpName" placeholder="MP Name" style="width: 100%;">
+                    <input type="text" id="mpParty" placeholder="Political Party" style="width: 100%;">
+                    <input type="text" id="mpConstituency" placeholder="Constituency" style="width: 100%;">
+                    <button onclick="createMPToken()">Create MP Token</button>
+                </div>
+            </div>
+            <h3>Create Voting Question</h3>
+            <div>
+                <textarea id="questionText" placeholder="Enter your question..." style="width: 100%; height: 60px;"></textarea>
+                <div>
+                    <label>Start Time:</label>
+                    <input type="datetime-local" id="startTime">
+                    <button onclick="setStartTimeNow()">Set to Now (+2 min)</button>
+                    <label>End Time:</label>
+                    <input type="datetime-local" id="endTime">
+                    <button onclick="setEndTime()">Set to +10 min from start</button>
+                </div>
+                <div style="margin: 10px 0; padding: 10px; border: 1px solid #ccc;">
+                    <strong>Current Blockchain Time:</strong> <span id="currentBlockchainTime">Loading...</span>
+                    <button onclick="getBlockchainTimestamp()">Refresh</button>
+                    <button onclick="testTimeValidation()">Test Time Validation</button>
+                </div>
+                <button onclick="createQuestion()">Create Question (Vault Owner)</button>
+            </div>
+            <h3>Manage Questions</h3>
+            <div>
+                <label>Question ID:</label>
+                <input type="number" id="questionIdToClose" placeholder="Question ID" min="1">
+                <button onclick="closeQuestion()">Close Question</button>
+                <button onclick="settleStakes()">Settle Stakes</button>
+            </div>
+            <h3>Admin Management</h3>
+            <div>
+                <input type="text" id="adminAddress" placeholder="Admin Address" style="width: 300px;">
+                <button onclick="addAdmin()">Add Admin</button>
+                <button onclick="removeAdmin()">Remove Admin</button>
+            </div>
+        </div>
+        <div>
+            <h2>MP Dashboard</h2>
+            <div id="mpStatus"></div>
+            <button onclick="loadMPTokens()">Refresh My MP Tokens</button>
+            <div id="myMPTokens"></div>
+        </div>
+        <div>
+            <h2>Active Voting (with Staking)</h2>
+            <button onclick="loadActiveQuestions()">Refresh Active Questions</button>
+            <div id="activeQuestions"></div>
+        </div>
+        <div>
+            <h2>Stake Management</h2>
+            <button onclick="loadMyStakes()">Check My Stakes</button>
+            <div id="myStakes"></div>
+        </div>
+        <div>
+            <h2>Voting Results & History</h2>
+            <button onclick="loadAllQuestions()">Load All Questions</button>
+            <div id="allQuestions"></div>
+        </div>
+        <div>
+            <h2>All MPs Directory</h2>
+            <button onclick="loadAllMPs()">Load All MPs</button>
+            <div id="allMPs"></div>
+        </div>
+        <div id="messages"></div>
+    </div>
+</body>
+</html>
