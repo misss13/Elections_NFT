@@ -10,14 +10,13 @@ ADMIN_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 
 print("=== DEPLOYING CONTRACTS ===")
 
-# Deploy MPTokenFactory with full output for debugging
+
 print("Deploying MPTokenFactory...")
 factory_cmd = f'forge script script/Deploy.sol:DeployMPTokenFactory --rpc-url http://localhost:8545 --private-key {ADMIN_KEY} --broadcast'
 factory_output = os.popen(factory_cmd).read()
 print("Factory deployment output:")
 print(factory_output)
 
-# Extract factory address
 FACTORY = ""
 for line in factory_output.split('\n'):
     if "MPTokenFactory deployed at:" in line:
@@ -33,21 +32,20 @@ os.environ["FACTORY_ADDRESS"] = FACTORY
 
 print(f"Factory Address: {FACTORY}")
 
-# Create MP NFTs
+
 print("Creating MP NFTs...")
 mp_cmd = f"./create_mp_nfts.sh --factory {FACTORY}"
 mp_output = os.popen(mp_cmd).read()
 print("MP NFT Creation output:")
 print(mp_output)
 
-# Deploy MPVoting with full output for debugging
 print("Deploying MPVoting...")
 voting_cmd = f'forge script script/DeployMPVoting.sol:DeployMPVoting --rpc-url http://localhost:8545 --private-key {ADMIN_KEY} --broadcast'
 voting_output = os.popen(voting_cmd).read()
 print("Voting deployment output:")
 print(voting_output)
 
-# Extract voting address
+
 VOTING_ADDRESS = ""
 for line in voting_output.split('\n'):
     if "MPVoting deployed at:" in line:
@@ -107,7 +105,7 @@ admin_initial = check_balance(ADMIN_ADDRESS, "Admin")
 print(f"\nWaiting for voting to start (65 seconds)...")
 time.sleep(65)
 
-# Voting patterns for each question
+
 voting_patterns = [
     # Question 1: 3 YES, 2 NO, 1 ABSTAIN
     [0, 0, 0, 1, 1, 2],
