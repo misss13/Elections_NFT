@@ -14,7 +14,7 @@ foundryup
 
 ```bash
 git clone <repository-url>
-cd nft-voting-project
+cd Elections_NFT
 forge install
 forge build
 ```
