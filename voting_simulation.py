@@ -2,26 +2,64 @@
 import os
 import time
 
-print("=== MP VOTING SYSTEM WITH 100 ETH STAKING DEMONSTRATION ===")
+print("=== MP VOTING SYSTEM WITH 100 ETH STAKING + DRAW DEMONSTRATION ===")
 
 os.environ["PRIVATE_KEY"] = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 ADMIN_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 ADMIN_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 
 print("=== DEPLOYING CONTRACTS ===")
-FACTORY='forge script script/Deploy.sol:DeployMPTokenFactory --rpc-url http://localhost:8545 --private-key {} --broadcast 2>/dev/null | grep "MPTokenFactory deployed at:" | cut -d" " -f6'.format(ADMIN_KEY)
-FACTORY = os.popen(FACTORY).read().replace("\n","")
-os.environ["MP_FACTORY_ADDRESS"] = "{}".format(FACTORY)
 
-MP="./create_mp_nfts.sh --factory {} ".format(FACTORY)
-_ = os.popen(MP).read()
+# Deploy MPTokenFactory with full output for debugging
+print("Deploying MPTokenFactory...")
+factory_cmd = f'forge script script/Deploy.sol:DeployMPTokenFactory --rpc-url http://localhost:8545 --private-key {ADMIN_KEY} --broadcast'
+factory_output = os.popen(factory_cmd).read()
+print("Factory deployment output:")
+print(factory_output)
 
-VOTING_ADDRESS='forge script script/DeployMPVoting.sol:DeployMPVoting --rpc-url http://localhost:8545 --broadcast 2>/dev/null | grep "MPVoting deployed at:" | cut -d" " -f6'
-VOTING_ADDRESS = os.popen(VOTING_ADDRESS).read().replace("\n","")
+# Extract factory address
+FACTORY = ""
+for line in factory_output.split('\n'):
+    if "MPTokenFactory deployed at:" in line:
+        FACTORY = line.split(":")[-1].strip()
+        break
 
-print("Factory Address:", FACTORY)
-print("MP NFT Creation:", _)
-print("Voting Address:", VOTING_ADDRESS)
+if not FACTORY:
+    print("ERROR: Failed to deploy MPTokenFactory")
+    print("Full output:", factory_output)
+    exit(1)
+
+os.environ["FACTORY_ADDRESS"] = FACTORY
+
+print(f"Factory Address: {FACTORY}")
+
+# Create MP NFTs
+print("Creating MP NFTs...")
+mp_cmd = f"./create_mp_nfts.sh --factory {FACTORY}"
+mp_output = os.popen(mp_cmd).read()
+print("MP NFT Creation output:")
+print(mp_output)
+
+# Deploy MPVoting with full output for debugging
+print("Deploying MPVoting...")
+voting_cmd = f'forge script script/DeployMPVoting.sol:DeployMPVoting --rpc-url http://localhost:8545 --private-key {ADMIN_KEY} --broadcast'
+voting_output = os.popen(voting_cmd).read()
+print("Voting deployment output:")
+print(voting_output)
+
+# Extract voting address
+VOTING_ADDRESS = ""
+for line in voting_output.split('\n'):
+    if "MPVoting deployed at:" in line:
+        VOTING_ADDRESS = line.split(":")[-1].strip()
+        break
+
+if not VOTING_ADDRESS:
+    print("ERROR: Failed to deploy MPVoting contract")
+    print("Full output:", voting_output)
+    exit(1)
+
+print(f"Voting Address: {VOTING_ADDRESS}")
 
 def check_balance(address, label):
     balance_wei = os.popen(f'cast balance {address} --rpc-url http://localhost:8545').read().strip()
@@ -40,170 +78,110 @@ voters = [
 
 print("\n=== CREATING VOTING QUESTIONS ===")
 
-question1 = 'cast send --rpc-url http://localhost:8545 --private-key {} {} "createQuestion(string,uint256,uint256)" "Czy nowa ustawa o ochronie środowiska powinna zostać uchwalona?" {} {}'.format(ADMIN_KEY, VOTING_ADDRESS, int(time.time()+60), int(time.time()+500))
-question2 = 'cast send --rpc-url http://localhost:8545 --private-key {} {} "createQuestion(string,uint256,uint256)" "Czy popierasz proponowaną reformę edukacji?" {} {}'.format(ADMIN_KEY, VOTING_ADDRESS, int(time.time()+60), int(time.time()+500))
-question3 = 'cast send --rpc-url http://localhost:8545 --private-key {} {} "createQuestion(string,uint256,uint256)" "Czy rząd powinien zwiększyć finansowanie odnawialnych źródeł energii?" {} {}'.format(ADMIN_KEY, VOTING_ADDRESS, int(time.time()+60), int(time.time()+500))
+start_time = int(time.time()) + 60
+end_time = int(time.time()) + 500
 
-print("Question 1:", question1)
-print("Question 2:", question2)
-print("Question 3:", question3)
+questions = [
+    "Environmental protection bill?",
+    "Education reform proposal?",
+    "Renewable energy funding?",
+    "Summer break proposal?"
+]
 
-_ = os.popen(question1).read()
-_ = os.popen(question2).read()
-_ = os.popen(question3).read()
+for i, question in enumerate(questions, 1):
+    print(f"Creating question {i}: {question}")
+    cmd = f'cast send --rpc-url http://localhost:8545 --private-key {ADMIN_KEY} {VOTING_ADDRESS} "createQuestion(string,uint256,uint256)" "{question}" {start_time} {end_time}'
+    result = os.popen(cmd).read()
+    if "Transaction hash" in result or "blockHash" in result:
+        print(f"Question {i} created successfully")
+    else:
+        print(f"Question {i} creation failed:")
+        print(result)
 
-print("Questions created!")
-
-print("\n=== INITIAL BALANCES (Before Any Voting) ===")
+print("\n=== INITIAL BALANCES ===")
 initial_balances = {}
 for private_key, address, label in voters:
     initial_balances[address] = check_balance(address, label)
-admin_initial = check_balance(ADMIN_ADDRESS, "Admin (Vault)")
+admin_initial = check_balance(ADMIN_ADDRESS, "Admin")
 
-print("\nWaiting for voting to start (1 minute)...")
+print(f"\nWaiting for voting to start (65 seconds)...")
 time.sleep(65)
 
-print("\n=== VOTING WITH 100 ETH STAKES ===")
-print("Each MP must stake 100 ETH to vote!")
-print("Question 1 pattern: 3xYES (winners), 2xNO (losers), 1xABSTAIN (loser)")
+# Voting patterns for each question
+voting_patterns = [
+    # Question 1: 3 YES, 2 NO, 1 ABSTAIN
+    [0, 0, 0, 1, 1, 2],
+    # Question 2: 2 YES, 3 NO, 1 ABSTAIN  
+    [0, 0, 1, 1, 1, 2],
+    # Question 3: 1 YES, 1 NO, 4 ABSTAIN
+    [2, 2, 2, 2, 0, 1],
+    # Question 4: 2 YES, 2 NO, 2 ABSTAIN (DRAW)
+    [0, 0, 1, 1, 2, 2]
+]
 
-v1='cast send --rpc-url http://localhost:8545/ --private-key "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a" {} "vote(uint256,uint256)" "1" "0" --value 100ether'.format(VOTING_ADDRESS)
-v2='cast send --rpc-url http://localhost:8545/ --private-key "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6" {} "vote(uint256,uint256)" "1" "0" --value 100ether'.format(VOTING_ADDRESS)
-v3='cast send --rpc-url http://localhost:8545/ --private-key "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a" {} "vote(uint256,uint256)" "1" "0" --value 100ether'.format(VOTING_ADDRESS)
-v4='cast send --rpc-url http://localhost:8545/ --private-key "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba" {} "vote(uint256,uint256)" "1" "1" --value 100ether'.format(VOTING_ADDRESS)
-v5='cast send --rpc-url http://localhost:8545/ --private-key "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e" {} "vote(uint256,uint256)" "1" "1" --value 100ether'.format(VOTING_ADDRESS)
-v6='cast send --rpc-url http://localhost:8545/ --private-key "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356" {} "vote(uint256,uint256)" "1" "2" --value 100ether'.format(VOTING_ADDRESS)
-
-print("MP-2 voting YES with 100 ETH stake...")
-_ = os.popen(v1).read()
-print("MP-3 voting YES with 100 ETH stake...")
-_ = os.popen(v2).read()
-print("MP-4 voting YES with 100 ETH stake...")
-_ = os.popen(v3).read()
-print("MP-5 voting NO with 100 ETH stake...")
-_ = os.popen(v4).read()
-print("MP-6 voting NO with 100 ETH stake...")
-_ = os.popen(v5).read()
-print("MP-7 voting ABSTAIN with 100 ETH stake...")
-_ = os.popen(v6).read()
-
-print("\n=== BALANCES AFTER VOTING (Each MP Lost 100 ETH) ===")
-for private_key, address, label in voters:
-    check_balance(address, label + " (after voting)")
-
-print("Total staked: 600 ETH (6 MPs × 100 ETH)")
-
-print("\n=== QUESTION 2: Education Reform (100 ETH stakes) ===")
-print("Pattern: 2xYES (losers), 3xNO (winners), 1xABSTAIN (loser)")
-
-v1='cast send --rpc-url http://localhost:8545/ --private-key "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a" {} "vote(uint256,uint256)" "2" "0" --value 100ether'.format(VOTING_ADDRESS)
-v2='cast send --rpc-url http://localhost:8545/ --private-key "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6" {} "vote(uint256,uint256)" "2" "0" --value 100ether'.format(VOTING_ADDRESS)
-v3='cast send --rpc-url http://localhost:8545/ --private-key "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a" {} "vote(uint256,uint256)" "2" "1" --value 100ether'.format(VOTING_ADDRESS)
-v4='cast send --rpc-url http://localhost:8545/ --private-key "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba" {} "vote(uint256,uint256)" "2" "1" --value 100ether'.format(VOTING_ADDRESS)
-v5='cast send --rpc-url http://localhost:8545/ --private-key "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e" {} "vote(uint256,uint256)" "2" "1" --value 100ether'.format(VOTING_ADDRESS)
-v6='cast send --rpc-url http://localhost:8545/ --private-key "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356" {} "vote(uint256,uint256)" "2" "2" --value 100ether'.format(VOTING_ADDRESS)
-
-_ = os.popen(v1).read()
-_ = os.popen(v2).read()
-_ = os.popen(v3).read()
-_ = os.popen(v4).read()
-_ = os.popen(v5).read()
-_ = os.popen(v6).read()
-
-print("=== QUESTION 3: Renewable Energy (100 ETH stakes) ===")
-print("Pattern: 1xYES (loser), 1xNO (loser), 4xABSTAIN (winners)")
-
-v1='cast send --rpc-url http://localhost:8545/ --private-key "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a" {} "vote(uint256,uint256)" "3" "2" --value 100ether'.format(VOTING_ADDRESS)
-v2='cast send --rpc-url http://localhost:8545/ --private-key "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6" {} "vote(uint256,uint256)" "3" "2" --value 100ether'.format(VOTING_ADDRESS)
-v3='cast send --rpc-url http://localhost:8545/ --private-key "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a" {} "vote(uint256,uint256)" "3" "2" --value 100ether'.format(VOTING_ADDRESS)
-v4='cast send --rpc-url http://localhost:8545/ --private-key "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba" {} "vote(uint256,uint256)" "3" "2" --value 100ether'.format(VOTING_ADDRESS)
-v5='cast send --rpc-url http://localhost:8545/ --private-key "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e" {} "vote(uint256,uint256)" "3" "0" --value 100ether'.format(VOTING_ADDRESS)
-v6='cast send --rpc-url http://localhost:8545/ --private-key "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356" {} "vote(uint256,uint256)" "3" "1" --value 100ether'.format(VOTING_ADDRESS)
-
-_ = os.popen(v1).read()
-_ = os.popen(v2).read()
-_ = os.popen(v3).read()
-_ = os.popen(v4).read()
-_ = os.popen(v5).read()
-_ = os.popen(v6).read()
-
-print("\n=== TOTAL STAKES: 1800 ETH (18 votes × 100 ETH) ===")
-
-yes_c='cast call '+ VOTING_ADDRESS + ' "getYesVotesCount(uint256)" {} --rpc-url http://localhost:8545/'
-no_c='cast call '+ VOTING_ADDRESS + ' "getNoVotesCount(uint256)" {} --rpc-url http://localhost:8545/'
+for q in range(4):
+    print(f"\n=== VOTING QUESTION {q+1} ===")
+    for i, (private_key, address, label) in enumerate(voters):
+        vote_option = voting_patterns[q][i]
+        vote_names = ["YES", "NO", "ABSTAIN"]
+        print(f"{label} voting {vote_names[vote_option]}...")
+        
+        cmd = f'cast send --rpc-url http://localhost:8545 --private-key "{private_key}" {VOTING_ADDRESS} "vote(uint256,uint256)" "{q+1}" "{vote_option}" --value 100ether'
+        result = os.popen(cmd).read()
+        if "Transaction hash" not in result and "blockHash" not in result:
+            print(f"Vote failed for {label}: {result}")
 
 print("\n=== VOTE COUNTS ===")
-print("============Question1============")
-y=os.popen(yes_c.format(1)).read()
-n=os.popen(no_c.format(1)).read()
-print("Yes count {}".format(y.strip()))
-print("No count {}".format(n.strip()))
-print("============Question2============")
-y=os.popen(yes_c.format(2)).read()
-n=os.popen(no_c.format(2)).read()
-print("Yes count {}".format(y.strip()))
-print("No count {}".format(n.strip()))
-print("============Question3============")
-y=os.popen(yes_c.format(3)).read()
-n=os.popen(no_c.format(3)).read()
-print("Yes count {}".format(y.strip()))
-print("No count {}".format(n.strip()))
+for q in range(1, 5):
+    print(f"Question {q}:")
+    yes_cmd = f'cast call {VOTING_ADDRESS} "getYesVotesCount(uint256)" {q} --rpc-url http://localhost:8545'
+    no_cmd = f'cast call {VOTING_ADDRESS} "getNoVotesCount(uint256)" {q} --rpc-url http://localhost:8545'
+    
+    y = os.popen(yes_cmd).read().strip()
+    n = os.popen(no_cmd).read().strip()
+    
+    try:
+        yes_count = int(y, 16) if y.startswith('0x') else int(y)
+        no_count = int(n, 16) if n.startswith('0x') else int(n)
+        print(f"  Yes: {yes_count}")
+        print(f"  No: {no_count}")
+    except:
+        print(f"  Yes: {y}")
+        print(f"  No: {n}")
 
-print("\n=== FAST FORWARDING TIME TO END VOTING ===")
-time.sleep(200)
+print("\nFast forwarding time...")
+time.sleep(100)
 _ = os.popen('cast rpc anvil_mine --rpc-url http://localhost:8545').read()
-
-print("Fast forwarding blockchain time by 1 hour...")
 _ = os.popen('cast rpc evm_increaseTime 3600 --rpc-url http://localhost:8545').read()
 _ = os.popen('cast rpc anvil_mine --rpc-url http://localhost:8545').read()
 
-print("Time fast-forwarded successfully")
-
 print("\n=== CLOSING VOTING ===")
-close1 = os.popen('cast send --rpc-url http://localhost:8545 --private-key {} {} "closeQuestion(uint256)" 1'.format(ADMIN_KEY, VOTING_ADDRESS)).read()
-close2 = os.popen('cast send --rpc-url http://localhost:8545 --private-key {} {} "closeQuestion(uint256)" 2'.format(ADMIN_KEY, VOTING_ADDRESS)).read()
-close3 = os.popen('cast send --rpc-url http://localhost:8545 --private-key {} {} "closeQuestion(uint256)" 3'.format(ADMIN_KEY, VOTING_ADDRESS)).read()
-
-print("All questions closed successfully")
+for q in range(1, 5):
+    print(f"Closing question {q}...")
+    cmd = f'cast send --rpc-url http://localhost:8545 --private-key {ADMIN_KEY} {VOTING_ADDRESS} "closeQuestion(uint256)" {q}'
+    result = os.popen(cmd).read()
+    if "Transaction hash" not in result and "blockHash" not in result:
+        print(f"Failed to close question {q}: {result}")
 
 print("\n=== VOTING RESULTS ===")
-r1 = os.popen('cast call {} "getVotingResults(uint256)" 1 --rpc-url http://localhost:8545/'.format(VOTING_ADDRESS)).read()
-r2 = os.popen('cast call {} "getVotingResults(uint256)" 2 --rpc-url http://localhost:8545/'.format(VOTING_ADDRESS)).read()
-r3 = os.popen('cast call {} "getVotingResults(uint256)" 3 --rpc-url http://localhost:8545/'.format(VOTING_ADDRESS)).read()
+for q in range(1, 5):
+    cmd = f'cast call {VOTING_ADDRESS} "getVotingResults(uint256)" {q} --rpc-url http://localhost:8545'
+    result = os.popen(cmd).read().strip()
+    yes_won = result == "true" or result == "0x0000000000000000000000000000000000000000000000000000000000000001"
+    print(f"Question {q} YES won: {yes_won}")
 
-print("Question 1 (Environmental): YES won = {}".format(r1.strip()))
-print("Question 2 (Education): YES won = {}".format(r2.strip()))  
-print("Question 3 (Renewable): YES won = {}".format(r3.strip()))
+print("\n=== DRAW DETECTION ===")
+draw_cmd = f'cast call {VOTING_ADDRESS} "isQuestionDraw(uint256)" 4 --rpc-url http://localhost:8545'
+draw_result = os.popen(draw_cmd).read().strip()
+is_draw = draw_result == "true" or draw_result == "0x0000000000000000000000000000000000000000000000000000000000000001"
+print(f"Question 4 is draw: {is_draw}")
 
-print("\n=== DETAILED VOTE CHECK FOR ALL QUESTIONS ===")
+if is_draw:
+    tied_cmd = f'cast call {VOTING_ADDRESS} "getTiedOptions(uint256)" 4 --rpc-url http://localhost:8545'
+    tied_result = os.popen(tied_cmd).read().strip()
+    print(f"Tied options: {tied_result}")
 
-vote_options = {0: "YES", 1: "NO", 2: "ABSTAIN"}
-
-for question_id in range(1, 4):
-    print(f"\n============Question {question_id}============")
-    
-    for private_key, address, label in voters:
-        vote_result = os.popen('cast call {} "checkVote(uint256, address)" {} "{}" --rpc-url http://localhost:8545/'.format(VOTING_ADDRESS, question_id, address)).read().replace("\n","")
-        
-        if len(vote_result) >= 66:
-            has_voted = int(vote_result[2:66], 16)
-            vote_choice = int(vote_result[66:], 16)
-            
-            if has_voted:
-                vote_name = vote_options.get(vote_choice, "UNKNOWN")
-                print(f"{label} ({address}): Voted {vote_name}")
-            else:
-                print(f"{label} ({address}): Did not vote")
-        else:
-            print(f"{label} ({address}): Error reading vote")
-
-print("\n=== STAKE CLAIMING DEMONSTRATION (WHERE THE MONEY FLOWS!) ===")
-
-print("\n============Question 1: Environmental Bill============")
-print("Result: YES won (3 votes) - NO and ABSTAIN lost")
-print("Winners (YES voters): Get 100 ETH back each")
-print("Losers (NO/ABSTAIN): Get 50 ETH back each, vault gets 50 ETH each")
-
+print("\n=== STAKE CLAIMING QUESTION 1 ===")
 vote_patterns_q1 = [
     (0, "YES", "WINNER"),
     (0, "YES", "WINNER"),  
@@ -213,59 +191,58 @@ vote_patterns_q1 = [
     (2, "ABSTAIN", "LOSER")
 ]
 
-print("\n=== CLAIMING STAKES FROM QUESTION 1 ===")
 for i, (private_key, address, label) in enumerate(voters):
     vote_option, vote_name, result = vote_patterns_q1[i]
     
-    print(f"\n{label} ({vote_name} voter - {result}) claiming stake from Q1:")
-    
     balance_before_wei = os.popen(f'cast balance {address} --rpc-url http://localhost:8545').read().strip()
     balance_before = int(balance_before_wei) / 1e18
-    print(f"  Before claim: {balance_before:.4f} ETH")
     
-    admin_before_wei = os.popen(f'cast balance {ADMIN_ADDRESS} --rpc-url http://localhost:8545').read().strip()
-    admin_before = int(admin_before_wei) / 1e18
-    
-    claim_cmd = f'cast send --rpc-url http://localhost:8545/ --private-key "{private_key}" {VOTING_ADDRESS} "claimStake(uint256)" "1"'
+    claim_cmd = f'cast send --rpc-url http://localhost:8545 --private-key "{private_key}" {VOTING_ADDRESS} "claimStake(uint256)" "1"'
     claim_result = os.popen(claim_cmd).read()
     
     balance_after_wei = os.popen(f'cast balance {address} --rpc-url http://localhost:8545').read().strip()
     balance_after = int(balance_after_wei) / 1e18
-    print(f"  After claim: {balance_after:.4f} ETH")
-    
-    admin_after_wei = os.popen(f'cast balance {ADMIN_ADDRESS} --rpc-url http://localhost:8545').read().strip()
-    admin_after = int(admin_after_wei) / 1e18
     
     mp_change = balance_after - balance_before
-    admin_change = admin_after - admin_before
-    total_change = balance_after - (initial_balances[address] / 1e18)
+    print(f"{label} ({vote_name}) received: {mp_change:.1f} ETH")
+
+print("\n=== STAKE CLAIMING QUESTION 4 DRAW ===")
+vault_balance_before_draw_wei = os.popen(f'cast balance {ADMIN_ADDRESS} --rpc-url http://localhost:8545').read().strip()
+vault_balance_before_draw = int(vault_balance_before_draw_wei) / 1e18
+
+vote_patterns_q4 = [
+    (0, "YES"),
+    (0, "YES"),  
+    (1, "NO"),
+    (1, "NO"),
+    (2, "ABSTAIN"),
+    (2, "ABSTAIN")
+]
+
+for i, (private_key, address, label) in enumerate(voters):
+    vote_option, vote_name = vote_patterns_q4[i]
     
-    print(f"  MP received: {mp_change:.1f} ETH")
-    if admin_change > 0:
-        print(f"  Vault earned: {admin_change:.1f} ETH")
-    print(f"  Total net change: {total_change:.1f} ETH")
+    balance_before_wei = os.popen(f'cast balance {address} --rpc-url http://localhost:8545').read().strip()
+    balance_before = int(balance_before_wei) / 1e18
     
-    if result == "WINNER":
-        print("  WINNER: Should get ~100 ETH back (full stake)")
-    else:
-        print("  LOSER: Should get ~50 ETH back (half stake)")
+    claim_cmd = f'cast send --rpc-url http://localhost:8545 --private-key "{private_key}" {VOTING_ADDRESS} "claimStake(uint256)" "4"'
+    claim_result = os.popen(claim_cmd).read()
+    
+    balance_after_wei = os.popen(f'cast balance {address} --rpc-url http://localhost:8545').read().strip()
+    balance_after = int(balance_after_wei) / 1e18
+    
+    mp_change = balance_after - balance_before
+    print(f"{label} ({vote_name}) received: {mp_change:.1f} ETH")
 
-print("\n=== ERROR CASE TESTING ===")
-print("Testing insufficient stake (should fail)...")
+vault_balance_after_draw_wei = os.popen(f'cast balance {ADMIN_ADDRESS} --rpc-url http://localhost:8545').read().strip()
+vault_balance_after_draw = int(vault_balance_after_draw_wei) / 1e18
+vault_earnings_from_draw = vault_balance_after_draw - vault_balance_before_draw
 
-print("Trying to vote with 1 ETH instead of 100 ETH on question 2...")
-error_cmd = f'cast send --rpc-url http://localhost:8545/ --private-key "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a" {VOTING_ADDRESS} "vote(uint256,uint256)" "2" "0" --value 1ether 2>&1'
-error_result = os.popen(error_cmd).read()
-if "revert" in error_result.lower() or "error" in error_result.lower() or "must stake exactly" in error_result:
-    print("Correctly failed: Cannot vote with 1 ETH instead of 100 ETH")
-else:
-    print("Unexpected: Vote should have failed")
-    print("Error output:", error_result[:100])
+print(f"\nVault earnings from draw: {vault_earnings_from_draw:.4f} ETH")
 
-print("\n=== FINAL FINANCIAL SUMMARY ===")
-
+print("\n=== FINAL BALANCES ===")
 admin_final_wei = os.popen(f'cast balance {ADMIN_ADDRESS} --rpc-url http://localhost:8545').read().strip()
 admin_final = int(admin_final_wei) / 1e18
 total_vault_earnings = admin_final - (admin_initial / 1e18)
-print(f"Admin (Vault) final balance: {admin_final:.4f} ETH")
+print(f"Admin final balance: {admin_final:.4f} ETH")
 print(f"Total vault earnings: {total_vault_earnings:.1f} ETH")
