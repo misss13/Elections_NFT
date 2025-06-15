@@ -36,13 +36,16 @@ forge test -vvv
 anvil
 
 # Terminal 2: Deploy contracts
-forge script script/Deploy.sol:DeployMPTokenFactory --rpc-url http://localhost:8545 --broadcast --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+export PRIVATE_KEY="..."
+forge script script/Deploy.sol:DeployMPTokenFactory --rpc-url http://localhost:8545 --broadcast
+export FACTORY_ADDRESS="..."
 
 # Deploy voting contract  
-forge script script/DeployMPVoting.sol:DeployMPVoting --rpc-url http://localhost:8545 --broadcast --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+forge script script/DeployMPVoting.sol:DeployMPVoting --rpc-url http://localhost:8545 --broadcast
+export MP_VOTING_ADDRESS="..."
 
 # Setup test data
-forge script script/CreateMPTokensForAnvil.sol:CreateMPTokensForAnvil --rpc-url http://localhost:8545 --broadcast --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+forge script script/CreateMPTokensForAnvil.sol:CreateMPTokensForAnvil --rpc-url http://localhost:8545 --broadcast
 ```
 
 ## Environment Variables
