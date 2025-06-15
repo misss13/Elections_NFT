@@ -9,7 +9,7 @@ contract DeployMPVoting is Script {
 
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address factoryAddress = vm.envAddress("MP_FACTORY_ADDRESS");
+        address factoryAddress = vm.envAddress("FACTORY_ADDRESS");
         
         vm.startBroadcast(deployerPrivateKey);
 
