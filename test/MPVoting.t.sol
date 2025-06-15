@@ -16,6 +16,7 @@ contract MPVotingTest is Test {
     address public mp1 = address(0x10);
     address public mp2 = address(0x11);
     address public mp3 = address(0x12);
+    address public mp4 = address(0x13);
     address public nonMP = address(0x20);
     address public vault = address(0x30);
     
@@ -25,6 +26,7 @@ contract MPVotingTest is Test {
     event QuestionCreated(uint256 indexed questionId, string question, uint256 startTime, uint256 endTime, address vault);
     event VoteCast(uint256 indexed questionId, address indexed voter, uint256 option, uint256 stake);
     event QuestionClosed(uint256 indexed questionId, uint256 totalVotes, uint256 winningOption);
+    event QuestionClosedWithDraw(uint256 indexed questionId, uint256 totalVotes, uint256[] tiedOptions);
     event StakeReturned(uint256 indexed questionId, address indexed voter, uint256 amount);
     event VaultEarnings(uint256 indexed questionId, address indexed vault, uint256 amount);
     
@@ -38,16 +40,16 @@ contract MPVotingTest is Test {
         factory.createMPToken(mp1, "John Smith", "Conservative", "Westminster North", 2024, expirationDate);
         factory.createMPToken(mp2, "Mary Johnson", "Labour", "Islington South", 2024, expirationDate);
         factory.createMPToken(mp3, "David Williams", "Liberal Democrats", "Birmingham Edgbaston", 2024, expirationDate);
+        factory.createMPToken(mp4, "Sarah Brown", "Green Party", "Manchester Central", 2024, expirationDate);
         vm.stopPrank();
         
         vm.deal(mp1, 1000 ether);
         vm.deal(mp2, 1000 ether);
         vm.deal(mp3, 1000 ether);
+        vm.deal(mp4, 1000 ether);
         vm.deal(nonMP, 1000 ether);
         vm.deal(vault, 1000 ether);
     }
-    
-    // ===== DEPLOYMENT AND INITIALIZATION TESTS =====
     
     function testDeployment() public view {
         assertEq(address(votingContract.mpTokenFactory()), address(factory));
@@ -60,8 +62,6 @@ contract MPVotingTest is Test {
         assertEq(votingContract.STAKE_AMOUNT(), STAKE_AMOUNT);
         assertEq(votingContract.LOSER_RETURN_PERCENTAGE(), 50);
     }
-    
-    // ===== ADMIN MANAGEMENT TESTS =====
     
     function testAddAdmin() public {
         vm.startPrank(admin);
@@ -91,8 +91,6 @@ contract MPVotingTest is Test {
         votingContract.removeAdmin(admin);
         vm.stopPrank();
     }
-    
-    // ===== QUESTION CREATION TESTS =====
     
     function testCreateQuestion() public {
         vm.startPrank(admin);
@@ -148,8 +146,6 @@ contract MPVotingTest is Test {
         vm.stopPrank();
     }
     
-    // ===== QUESTION UPDATE TESTS =====
-    
     function testUpdateQuestion() public {
         vm.startPrank(admin);
         uint256 questionId = votingContract.createQuestion("Original?", block.timestamp + 1 hours, block.timestamp + 2 hours);
@@ -179,12 +175,11 @@ contract MPVotingTest is Test {
         vm.stopPrank();
     }
     
-    // ===== MP VOTER VALIDATION TESTS =====
-    
     function testIsValidMPVoter() public {
         assertTrue(votingContract.isValidMPVoter(mp1));
         assertTrue(votingContract.isValidMPVoter(mp2));
         assertTrue(votingContract.isValidMPVoter(mp3));
+        assertTrue(votingContract.isValidMPVoter(mp4));
         assertFalse(votingContract.isValidMPVoter(nonMP));
     }
     
@@ -206,8 +201,6 @@ contract MPVotingTest is Test {
         vm.warp(block.timestamp + 2);
         assertFalse(votingContract.isValidMPVoter(nonMP));
     }
-    
-    // ===== VOTING TESTS =====
     
     function testVote() public {
         vm.startPrank(admin);
@@ -316,8 +309,6 @@ contract MPVotingTest is Test {
         vm.stopPrank();
     }
     
-    // ===== QUESTION CLOSING TESTS =====
-    
     function testCloseQuestion() public {
         vm.startPrank(admin);
         uint256 questionId = votingContract.createQuestion("Test question?", block.timestamp + 1, block.timestamp + 1 hours);
@@ -347,6 +338,7 @@ contract MPVotingTest is Test {
         assertEq(winningOption, 0);
         
         assertTrue(votingContract.getVotingResults(questionId));
+        assertFalse(votingContract.isQuestionDraw(questionId));
         vm.stopPrank();
     }
     
@@ -378,8 +370,6 @@ contract MPVotingTest is Test {
         votingContract.closeQuestion(questionId);
         vm.stopPrank();
     }
-    
-    // ===== STAKE CLAIMING TESTS =====
     
     function testClaimStakeWinner() public {
         vm.startPrank(admin);
@@ -432,19 +422,23 @@ contract MPVotingTest is Test {
         
         uint256 mp1BalanceBefore = mp1.balance;
         uint256 mp2BalanceBefore = mp2.balance;
+        uint256 mp3BalanceBefore = mp3.balance;
         uint256 vaultBalanceBefore = admin.balance;
         
         vm.prank(mp1);
         votingContract.vote{value: STAKE_AMOUNT}(questionId, 0);
         
         vm.prank(mp2);
+        votingContract.vote{value: STAKE_AMOUNT}(questionId, 0);
+        
+        vm.prank(mp3);
         votingContract.vote{value: STAKE_AMOUNT}(questionId, 1);
         
         vm.warp(block.timestamp + 1 hours + 1);
         vm.prank(admin);
         votingContract.closeQuestion(questionId);
         
-        vm.startPrank(mp2);
+        vm.startPrank(mp3);
         uint256 expectedReturn = (STAKE_AMOUNT * 50) / 100;
         uint256 expectedVaultEarnings = STAKE_AMOUNT - expectedReturn;
         
@@ -452,14 +446,14 @@ contract MPVotingTest is Test {
         emit VaultEarnings(questionId, admin, expectedVaultEarnings);
         
         vm.expectEmit(true, true, false, true);
-        emit StakeReturned(questionId, mp2, expectedReturn);
+        emit StakeReturned(questionId, mp3, expectedReturn);
         
         votingContract.claimStake(questionId);
         
-        uint256 mp2BalanceAfterClaim = mp2.balance;
+        uint256 mp3BalanceAfterClaim = mp3.balance;
         uint256 vaultBalanceAfterClaim = admin.balance;
         
-        assertEq(mp2BalanceBefore - mp2BalanceAfterClaim, expectedReturn);
+        assertEq(mp3BalanceBefore - mp3BalanceAfterClaim, STAKE_AMOUNT - expectedReturn);
         assertEq(vaultBalanceAfterClaim - vaultBalanceBefore, expectedVaultEarnings);
         vm.stopPrank();
     }
@@ -502,7 +496,146 @@ contract MPVotingTest is Test {
         vm.stopPrank();
     }
     
-    // ===== ACTIVE QUESTIONS TESTS =====
+    function testDrawDetection() public {
+        vm.startPrank(admin);
+        uint256 questionId = votingContract.createQuestion("Draw test question?", block.timestamp + 1, block.timestamp + 1 hours);
+        vm.stopPrank();
+        
+        vm.warp(block.timestamp + 2);
+        
+        vm.prank(mp1);
+        votingContract.vote{value: STAKE_AMOUNT}(questionId, 0);
+        
+        vm.prank(mp2);
+        votingContract.vote{value: STAKE_AMOUNT}(questionId, 1);
+        
+        vm.warp(block.timestamp + 1 hours + 1);
+        
+        vm.startPrank(admin);
+        uint256[] memory expectedTiedOptions = new uint256[](2);
+        expectedTiedOptions[0] = 0;
+        expectedTiedOptions[1] = 1;
+        
+        vm.expectEmit(true, false, false, true);
+        emit QuestionClosedWithDraw(questionId, 2, expectedTiedOptions);
+        
+        votingContract.closeQuestion(questionId);
+        
+        assertTrue(votingContract.isQuestionDraw(questionId));
+        assertFalse(votingContract.getVotingResults(questionId));
+        
+        uint256[] memory tiedOptions = votingContract.getTiedOptions(questionId);
+        assertEq(tiedOptions.length, 2);
+        assertEq(tiedOptions[0], 0);
+        assertEq(tiedOptions[1], 1);
+        
+        (,,,, bool isActive,,,, uint256 winningOption) = votingContract.getQuestionDetails(questionId);
+        assertFalse(isActive);
+        assertEq(winningOption, type(uint256).max);
+        
+        vm.stopPrank();
+    }
+    
+    function testThreeWayDraw() public {
+        vm.startPrank(admin);
+        uint256 questionId = votingContract.createQuestion("Three way draw test?", block.timestamp + 1, block.timestamp + 1 hours);
+        vm.stopPrank();
+        
+        vm.warp(block.timestamp + 2);
+        
+        vm.prank(mp1);
+        votingContract.vote{value: STAKE_AMOUNT}(questionId, 0);
+        
+        vm.prank(mp2);
+        votingContract.vote{value: STAKE_AMOUNT}(questionId, 1);
+        
+        vm.prank(mp3);
+        votingContract.vote{value: STAKE_AMOUNT}(questionId, 2);
+        
+        vm.warp(block.timestamp + 1 hours + 1);
+        vm.prank(admin);
+        votingContract.closeQuestion(questionId);
+        
+        assertTrue(votingContract.isQuestionDraw(questionId));
+        
+        uint256[] memory tiedOptions = votingContract.getTiedOptions(questionId);
+        assertEq(tiedOptions.length, 3);
+        assertEq(tiedOptions[0], 0);
+        assertEq(tiedOptions[1], 1);
+        assertEq(tiedOptions[2], 2);
+        
+        (bool isDraw, bool yesWon, bool noWon, uint256 winningOption) = votingContract.getDetailedVotingResults(questionId);
+        assertTrue(isDraw);
+        assertFalse(yesWon);
+        assertFalse(noWon);
+        assertEq(winningOption, type(uint256).max);
+    }
+    
+    function testDrawStakeReturns() public {
+        vm.startPrank(admin);
+        uint256 questionId = votingContract.createQuestion("Draw stake test?", block.timestamp + 1, block.timestamp + 1 hours);
+        vm.stopPrank();
+        
+        vm.warp(block.timestamp + 2);
+        
+        uint256 mp1BalanceBefore = mp1.balance;
+        uint256 mp2BalanceBefore = mp2.balance;
+        uint256 vaultBalanceBefore = admin.balance;
+        
+        vm.prank(mp1);
+        votingContract.vote{value: STAKE_AMOUNT}(questionId, 0);
+        
+        vm.prank(mp2);
+        votingContract.vote{value: STAKE_AMOUNT}(questionId, 1);
+        
+        vm.warp(block.timestamp + 1 hours + 1);
+        vm.prank(admin);
+        votingContract.closeQuestion(questionId);
+        
+        assertTrue(votingContract.isQuestionDraw(questionId));
+        
+        vm.prank(mp1);
+        votingContract.claimStake(questionId);
+        
+        vm.prank(mp2);
+        votingContract.claimStake(questionId);
+        
+        uint256 mp1BalanceAfter = mp1.balance;
+        uint256 mp2BalanceAfter = mp2.balance;
+        uint256 vaultBalanceAfter = admin.balance;
+        
+        assertEq(mp1BalanceAfter, mp1BalanceBefore);
+        assertEq(mp2BalanceAfter, mp2BalanceBefore);
+        assertEq(vaultBalanceAfter, vaultBalanceBefore);
+    }
+    
+    function testGetDetailedVotingResults() public {
+        vm.startPrank(admin);
+        uint256 questionId = votingContract.createQuestion("Detailed results test?", block.timestamp + 1, block.timestamp + 1 hours);
+        vm.stopPrank();
+        
+        vm.warp(block.timestamp + 2);
+        
+        vm.prank(mp1);
+        votingContract.vote{value: STAKE_AMOUNT}(questionId, 0);
+        
+        vm.prank(mp2);
+        votingContract.vote{value: STAKE_AMOUNT}(questionId, 0);
+        
+        vm.prank(mp3);
+        votingContract.vote{value: STAKE_AMOUNT}(questionId, 1);
+        
+        vm.warp(block.timestamp + 1 hours + 1);
+        vm.prank(admin);
+        votingContract.closeQuestion(questionId);
+        
+        (bool isDraw, bool yesWon, bool noWon, uint256 winningOption) = votingContract.getDetailedVotingResults(questionId);
+        
+        assertFalse(isDraw);
+        assertTrue(yesWon);
+        assertFalse(noWon);
+        assertEq(winningOption, 0);
+    }
     
     function testGetActiveQuestions() public {
         vm.startPrank(admin);
@@ -530,8 +663,6 @@ contract MPVotingTest is Test {
         assertEq(activeQuestions.length, 1);
         assertEq(activeQuestions[0], q4);
     }
-    
-    // ===== EMERGENCY WITHDRAWAL TESTS =====
     
     function testEmergencyWithdraw() public {
         vm.deal(address(votingContract), 100 ether);
@@ -563,8 +694,6 @@ contract MPVotingTest is Test {
         vm.stopPrank();
     }
     
-    // ===== INTEGRATION TESTS =====
-    
     function testFullVotingCycleWithStaking() public {
         vm.startPrank(admin);
         uint256 questionId = votingContract.createQuestion("Integration test question?", block.timestamp + 1, block.timestamp + 1 hours);
@@ -593,6 +722,7 @@ contract MPVotingTest is Test {
         assertTrue(votingContract.getVotingResults(questionId));
         assertEq(votingContract.getYesVotesCount(questionId), 2);
         assertEq(votingContract.getNoVotesCount(questionId), 1);
+        assertFalse(votingContract.isQuestionDraw(questionId));
         
         vm.prank(mp1);
         votingContract.claimStake(questionId);
@@ -636,8 +766,6 @@ contract MPVotingTest is Test {
         assertTrue(returned);
     }
     
-    // ===== EDGE CASES =====
-    
     function testZeroVoteScenario() public {
         vm.startPrank(admin);
         uint256 questionId = votingContract.createQuestion("No votes question?", block.timestamp + 1, block.timestamp + 1 hours);
@@ -650,7 +778,8 @@ contract MPVotingTest is Test {
         
         assertEq(votingContract.getYesVotesCount(questionId), 0);
         assertEq(votingContract.getNoVotesCount(questionId), 0);
-        assertTrue(votingContract.getVotingResults(questionId));
+        assertTrue(votingContract.isQuestionDraw(questionId));
+        assertFalse(votingContract.getVotingResults(questionId));
     }
     
     function testTieVoteScenario() public {
@@ -670,7 +799,8 @@ contract MPVotingTest is Test {
         vm.prank(admin);
         votingContract.closeQuestion(questionId);
         
-        assertTrue(votingContract.getVotingResults(questionId));
+        assertTrue(votingContract.isQuestionDraw(questionId));
+        assertFalse(votingContract.getVotingResults(questionId));
     }
     
     receive() external payable {}
