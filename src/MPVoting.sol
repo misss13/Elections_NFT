@@ -6,18 +6,13 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./MPToken.sol";
 import "./MPTokenFactory.sol";
 
-/**
- * @title MPVoting
- * @notice A voting system for MPs who hold MP ID NFTs with staking mechanism
- * 
- */
 contract MPVoting is AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     MPTokenFactory public mpTokenFactory;
     MPToken public mpToken;
     
     uint256 public constant STAKE_AMOUNT = 100 ether;
-    uint256 public constant LOSER_RETURN_PERCENTAGE = 50; // 50% return for losers
+    uint256 public constant LOSER_RETURN_PERCENTAGE = 50;
     
     struct Question {
         string question;
@@ -25,16 +20,18 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         uint256 startTime;
         uint256 endTime;
         bool isActive;
-        bool isSettled; // Whether stakes have been distributed
+        bool isSettled;
+        bool isDraw;
         uint256 totalVotes;
-        address vault; // The admin who created the question (vault owner)
-        uint256 winningOption; // Set after voting ends
-        uint256 totalStaked; // Total amount staked
+        address vault;
+        uint256 winningOption;
+        uint256 totalStaked;
+        uint256[] tiedOptions;
         mapping(uint256 => uint256) optionVotes; 
         mapping(address => bool) hasVoted;      
         mapping(address => uint256) voterChoice; 
-        mapping(address => uint256) voterStake; // Track each voter's stake
-        mapping(address => bool) stakeReturned; // Track if stake has been returned
+        mapping(address => uint256) voterStake;
+        mapping(address => bool) stakeReturned;
     }
     
     uint256 public questionCount;
@@ -44,14 +41,11 @@ contract MPVoting is AccessControl, ReentrancyGuard {
     event QuestionUpdated(uint256 indexed questionId, string question, bool isActive);
     event VoteCast(uint256 indexed questionId, address indexed voter, uint256 option, uint256 stake);
     event QuestionClosed(uint256 indexed questionId, uint256 totalVotes, uint256 winningOption);
+    event QuestionClosedWithDraw(uint256 indexed questionId, uint256 totalVotes, uint256[] tiedOptions);
     event StakeReturned(uint256 indexed questionId, address indexed voter, uint256 amount);
     event VaultEarnings(uint256 indexed questionId, address indexed vault, uint256 amount);
     event QuestionSettled(uint256 indexed questionId, uint256 totalDistributed);
     
-    /**
-     * @notice Constructor that sets up the contract with the MP Token Factory
-     * @param _mpTokenFactoryAddress Address of the MP Token Factory contract
-     */
     constructor(address _mpTokenFactoryAddress) {
         require(_mpTokenFactoryAddress != address(0), "Invalid MP Token Factory address");
         mpTokenFactory = MPTokenFactory(_mpTokenFactoryAddress);
@@ -61,46 +55,23 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         _grantRole(ADMIN_ROLE, msg.sender);
     }
     
-    /**
-     * @notice Modifier to ensure only admins can call a function
-     */
     modifier onlyAdmin() {
         require(hasRole(ADMIN_ROLE, msg.sender), "Caller is not an admin");
         _;
     }
     
-    /**
-     * @notice Add an admin to the contract
-     * @param admin Address to add as admin
-     */
     function addAdmin(address admin) public onlyAdmin {
         _grantRole(ADMIN_ROLE, admin);
     }
     
-    /**
-     * @notice Remove an admin from the contract
-     * @param admin Address to remove as admin
-     */
     function removeAdmin(address admin) public onlyAdmin {
         _revokeRole(ADMIN_ROLE, admin);
     }
     
-    /**
-     * @notice Check if an address is an admin
-     * @param account Address to check
-     * @return bool True if the address is an admin
-     */
     function isAdmin(address account) public view returns (bool) {
         return hasRole(ADMIN_ROLE, account);
     }
     
-    /**
-     * @notice Create a new voting question
-     * @param _question The question text
-     * @param _startTime When voting starts (unix timestamp)
-     * @param _endTime When voting ends (unix timestamp)
-     * @return questionId The ID of the newly created question
-     */
     function createQuestion(
         string memory _question,
         uint256 _startTime,
@@ -118,11 +89,11 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         newQuestion.endTime = _endTime;
         newQuestion.isActive = true;
         newQuestion.isSettled = false;
-        newQuestion.vault = msg.sender; // The creator becomes the vault
+        newQuestion.isDraw = false;
+        newQuestion.vault = msg.sender;
         newQuestion.totalVotes = 0;
         newQuestion.totalStaked = 0;
         
-        // Initialize options
         newQuestion.options.push("Yes");
         newQuestion.options.push("No");
         newQuestion.options.push("Abstain");
@@ -131,11 +102,6 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         return questionId;
     }
     
-    /**
-     * @notice Update a question (only before voting begins)
-     * @param _questionId The ID of the question to update
-     * @param _question New question text
-     */
     function updateQuestion(
         uint256 _questionId,
         string memory _question
@@ -149,11 +115,6 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         emit QuestionUpdated(_questionId, _question, q.isActive);
     }
     
-    /**
-     * @notice Cast a vote on a question with stake
-     * @param _questionId The question ID to vote on
-     * @param _optionIndex The index of the option to vote for
-     */
     function vote(uint256 _questionId, uint256 _optionIndex) public payable nonReentrant {
         require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
         Question storage q = questions[_questionId];
@@ -165,7 +126,6 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         require(isValidMPVoter(msg.sender), "Not a valid MP voter");
         require(msg.value == STAKE_AMOUNT, "Must stake exactly 100 ETH");
         
-        // Record the vote
         q.optionVotes[_optionIndex]++;
         q.totalVotes++;
         q.hasVoted[msg.sender] = true;
@@ -176,10 +136,6 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         emit VoteCast(_questionId, msg.sender, _optionIndex, msg.value);
     }
     
-    /**
-     * @notice Close a question after voting ends and determine the winner
-     * @param _questionId The ID of the question to close
-     */
     function closeQuestion(uint256 _questionId) public onlyAdmin {
         require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
         Question storage q = questions[_questionId];
@@ -187,27 +143,46 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         require(block.timestamp > q.endTime, "Voting period not over yet");
         require(!q.isSettled, "Question already settled");
         
-        // Determine winning option
         uint256 maxVotes = 0;
-        uint256 winningOption = 0;
-        
         for (uint256 i = 0; i < q.options.length; i++) {
             if (q.optionVotes[i] > maxVotes) {
                 maxVotes = q.optionVotes[i];
-                winningOption = i;
             }
         }
         
-        q.winningOption = winningOption;
-        q.isActive = false;
+        uint256 tiedCount = 0;
+        for (uint256 i = 0; i < q.options.length; i++) {
+            if (q.optionVotes[i] == maxVotes) {
+                tiedCount++;
+            }
+        }
         
-        emit QuestionClosed(_questionId, q.totalVotes, winningOption);
+        if (tiedCount > 1) {
+            q.isDraw = true;
+            q.winningOption = type(uint256).max;
+            
+            for (uint256 i = 0; i < q.options.length; i++) {
+                if (q.optionVotes[i] == maxVotes) {
+                    q.tiedOptions.push(i);
+                }
+            }
+            
+            emit QuestionClosedWithDraw(_questionId, q.totalVotes, q.tiedOptions);
+        } else {
+            q.isDraw = false;
+            for (uint256 i = 0; i < q.options.length; i++) {
+                if (q.optionVotes[i] == maxVotes) {
+                    q.winningOption = i;
+                    break;
+                }
+            }
+            
+            emit QuestionClosed(_questionId, q.totalVotes, q.winningOption);
+        }
+        
+        q.isActive = false;
     }
     
-    /**
-     * @notice Settle stakes after voting ends
-     * @param _questionId The ID of the question to settle
-     */
     function settleStakes(uint256 _questionId) public onlyAdmin nonReentrant {
         require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
         Question storage q = questions[_questionId];
@@ -215,32 +190,9 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         require(!q.isSettled, "Stakes already settled");
         require(q.totalVotes > 0, "No votes to settle");
         
-        uint256 totalVaultEarnings = 0;
-        
-        // Process all voters - this is a simplified version
-        // In production, you might want to implement pagination for gas efficiency
-        //uint256[] memory voterAddresses = new uint256[](0); // This would need to be tracked separately
-        
-        // For demonstration, we'll need to track voters separately
-        // This is a limitation of the current implementation
-        // In a production version, you'd maintain a separate array of voter addresses
-        
         q.isSettled = true;
-        
-        // Transfer vault earnings
-        if (totalVaultEarnings > 0) {
-            (bool success, ) = q.vault.call{value: totalVaultEarnings}("");
-            require(success, "Vault transfer failed");
-            emit VaultEarnings(_questionId, q.vault, totalVaultEarnings);
-        }
-        
         emit QuestionSettled(_questionId, q.totalStaked);
     }
-    
-    /**
-     * @notice Claim stake back after voting ends
-     * @param _questionId The ID of the question
-     */
     
     function claimStake(uint256 _questionId) public nonReentrant {
         require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
@@ -253,14 +205,13 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         uint256 stakeAmount = q.voterStake[msg.sender];
         uint256 returnAmount;
         
-        if (q.voterChoice[msg.sender] == q.winningOption) {
-            // Winner gets full stake back
+        if (q.isDraw) {
+            returnAmount = stakeAmount;
+        } else if (q.voterChoice[msg.sender] == q.winningOption) {
             returnAmount = stakeAmount;
         } else {
-            // Loser gets 50% back
             returnAmount = (stakeAmount * LOSER_RETURN_PERCENTAGE) / 100;
             
-            // Vault gets the remaining 50%
             uint256 vaultAmount = stakeAmount - returnAmount;
             (bool vaultSuccess, ) = q.vault.call{value: vaultAmount}("");
             require(vaultSuccess, "Vault transfer failed");
@@ -269,21 +220,12 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         
         q.stakeReturned[msg.sender] = true;
         
-        // Return stake to voter
         (bool success, ) = msg.sender.call{value: returnAmount}("");
         require(success, "Stake return failed");
         
         emit StakeReturned(_questionId, msg.sender, returnAmount);
     }
     
-    /**
-     * @notice Get stake information for a voter
-     * @param _questionId The question ID
-     * @param _voter The voter address
-     * @return staked Amount staked
-     * @return returned Whether stake has been returned
-     * @return canClaim Whether the voter can claim their stake
-     */
     function getStakeInfo(uint256 _questionId, address _voter) public view returns (
         uint256 staked,
         bool returned,
@@ -299,19 +241,6 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         return (staked, returned, canClaim);
     }
     
-    /**
-     * @notice Get details of a question including stake info
-     * @param _questionId The question ID
-     * @return question The question text
-     * @return options The answer options
-     * @return startTime When voting starts
-     * @return endTime When voting ends
-     * @return isActive Whether the question is active
-     * @return totalVotes Total number of votes cast
-     * @return vault The vault owner address
-     * @return totalStaked Total amount staked
-     * @return winningOption The winning option (if determined)
-     */
     function getQuestionDetails(uint256 _questionId) public view returns (
         string memory question,
         string[] memory options,
@@ -338,12 +267,18 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         );
     }
     
-    /**
-     * @notice Get vote count for a specific option
-     * @param _questionId The question ID
-     * @param _optionIndex The option index
-     * @return voteCount Number of votes for the option
-     */
+    function getTiedOptions(uint256 _questionId) public view returns (uint256[] memory tiedOptions) {
+        require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
+        Question storage q = questions[_questionId];
+        return q.tiedOptions;
+    }
+    
+    function isQuestionDraw(uint256 _questionId) public view returns (bool isDraw) {
+        require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
+        Question storage q = questions[_questionId];
+        return q.isDraw;
+    }
+    
     function getOptionVoteCount(uint256 _questionId, uint256 _optionIndex) public view returns (uint256 voteCount) {
         require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
         Question storage q = questions[_questionId];
@@ -351,46 +286,54 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         return q.optionVotes[_optionIndex];
     }
 
-    /**
-     * @notice Return all yes votes
-     * @param _questionId The question ID
-     * @return yes_counts number of votes which supported question
-     */
     function getYesVotesCount(uint256 _questionId) public view returns (uint256 yes_counts) {
         require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
         Question storage q = questions[_questionId];
         return q.optionVotes[0];
     }
 
-    /**
-     * @notice Return all no votes
-     * @param _questionId The question ID
-     * @return no_counts number of votes which opposed question
-     */
     function getNoVotesCount(uint256 _questionId) public view returns (uint256 no_counts) {
         require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
         Question storage q = questions[_questionId];
         return q.optionVotes[1];
     }
     
-/**
- * @notice Return voting results
- * @param _questionId The question ID
- * @return results true if Yes won, false otherwise
- */
-function getVotingResults(uint256 _questionId) public view returns (bool results) {
-    require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
-    Question storage q = questions[_questionId];
-    require(!q.isActive, "Voting not ended yet. Results will be available after the voting");
-    return q.winningOption == 0; // 0 is "Yes" option
-}
+    function getVotingResults(uint256 _questionId) public view returns (bool results) {
+        require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
+        Question storage q = questions[_questionId];
+        require(!q.isActive, "Voting not ended yet. Results will be available after the voting");
+        
+        if (q.isDraw) {
+            return false;
+        }
+        
+        return q.winningOption == 0;
+    }
 
+    function getDetailedVotingResults(uint256 _questionId) public view returns (
+        bool isDraw,
+        bool yesWon,
+        bool noWon,
+        uint256 winningOption
+    ) {
+        require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
+        Question storage q = questions[_questionId];
+        require(!q.isActive, "Voting not ended yet. Results will be available after the voting");
+        
+        isDraw = q.isDraw;
+        winningOption = q.winningOption;
+        
+        if (isDraw) {
+            yesWon = false;
+            noWon = false;
+        } else {
+            yesWon = (q.winningOption == 0);
+            noWon = (q.winningOption == 1);
+        }
+        
+        return (isDraw, yesWon, noWon, winningOption);
+    }
     
-    /**
-     * @notice Get all vote counts for a question
-     * @param _questionId The question ID
-     * @return voteCounts Array of vote counts for each option
-     */
     function getAllVoteCounts(uint256 _questionId) public view returns (uint256[] memory voteCounts) {
         require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
         Question storage q = questions[_questionId];
@@ -401,39 +344,23 @@ function getVotingResults(uint256 _questionId) public view returns (bool results
         return counts;
     }
     
-    /**
-     * @notice Check if an address has voted on a question
-     * @param _questionId The question ID
-     * @param _voter The address to check
-     * @return hasVoted True if the address has voted
-     * @return optionIndex The index of the option they voted for (0 if not voted)
-     */
     function checkVote(uint256 _questionId, address _voter) public view returns (bool hasVoted, uint256 optionIndex) {
         require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
         Question storage q = questions[_questionId];
         return (q.hasVoted[_voter], q.voterChoice[_voter]);
     }
     
-    /**
-     * @notice Check if an address is a valid MP voter
-     * @param _voter The address to check
-     * @return isValid True if the address is a valid MP voter
-     */
     function isValidMPVoter(address _voter) public view returns (bool isValid) {
-        // Check if the voter has at least one MP token
         uint256 balance = mpToken.balanceOf(_voter);
         if (balance == 0) {
             return false;
         }
         
-        // Get the total MP count
         uint256 totalMPs = mpTokenFactory.getMPTokenCount();
         
-        // Check if the voter owns any active, non-expired MP tokens
         for (uint256 i = 1; i <= totalMPs; i++) {
             try mpToken.ownerOf(i) returns (address owner) {
                 if (owner == _voter) {
-                    // Check if token is active and not expired
                     try mpTokenFactory.getMPTokenData(i) returns (MPToken.MPData memory data) {
                         bool isExpired = mpTokenFactory.isTokenExpired(i);
                         if (data.isActive && !isExpired) {
@@ -451,14 +378,9 @@ function getVotingResults(uint256 _questionId) public view returns (bool results
         return false;
     }
     
-    /**
-     * @notice Get all active questions
-     * @return activeQuestionIds Array of active question IDs
-     */
     function getActiveQuestions() public view returns (uint256[] memory activeQuestionIds) {
         uint256 activeCount = 0;
         
-        // First, count active questions
         for (uint256 i = 1; i <= questionCount; i++) {
             if (questions[i].isActive && 
                 questions[i].startTime <= block.timestamp && 
@@ -467,7 +389,6 @@ function getVotingResults(uint256 _questionId) public view returns (bool results
             }
         }
         
-        // Then create array of active question IDs
         uint256[] memory activeIds = new uint256[](activeCount);
         uint256 index = 0;
         for (uint256 i = 1; i <= questionCount; i++) {
@@ -482,10 +403,6 @@ function getVotingResults(uint256 _questionId) public view returns (bool results
         return activeIds;
     }
     
-    /**
-     * @notice Withdraw accumulated vault earnings (emergency function)
-     * @dev Only callable by the contract owner in case of stuck funds
-     */
     function emergencyWithdraw() public onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 balance = address(this).balance;
         require(balance > 0, "No funds to withdraw");
