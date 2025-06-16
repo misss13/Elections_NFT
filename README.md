@@ -13,11 +13,9 @@ This system enables secure voting by MPs through:
 ## Prerequisites
 
 ```bash
-# Install Foundry
 curl -L https://foundry.paradigm.xyz | bash
 foundryup
 
-# Verify installation
 forge --version
 cast --version
 anvil --version
@@ -26,7 +24,6 @@ anvil --version
 ## Setup
 
 ```bash
-# Clone and setup
 git clone <repository-url>
 cd Elections_NFT
 forge install
@@ -50,7 +47,7 @@ forge script script/Deploy.sol:DeployMPTokenFactory \
   --private-key $PRIVATE_KEY \
   --broadcast
 
-# Set factory address from deployment output
+# Set factory address
 export FACTORY_ADDRESS="0x5FbDB2315678afecb367f032d93F642f64180aa3"
 
 # Deploy Voting Contract
@@ -59,14 +56,8 @@ forge script script/DeployMPVoting.sol:DeployMPVoting \
   --private-key $PRIVATE_KEY \
   --broadcast
 
-# Set voting address from deployment output
+# Set voting address 
 export VOTING_ADDRESS="0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
-
-# Create test MP tokens and voting questions
-forge script script/CreateMPTokensForAnvil.sol:CreateMPTokensForAnvil \
-  --rpc-url http://localhost:8545 \
-  --private-key $PRIVATE_KEY \
-  --broadcast
 ```
 
 ## Voting Process
@@ -80,7 +71,6 @@ cast call $VOTING_ADDRESS "isValidMPVoter(address)" $YOUR_ADDRESS \
 ### 2. Cast vote with stake
 ```bash
 # Vote options: 0=Yes, 1=No, 2=Abstain
-# Question ID starts from 1
 cast send $VOTING_ADDRESS "vote(uint256,uint256)" 1 0 \
   --value 100ether \
   --private-key $YOUR_PRIVATE_KEY \
@@ -89,10 +79,6 @@ cast send $VOTING_ADDRESS "vote(uint256,uint256)" 1 0 \
 
 ### 3. Check voting results (after voting ends)
 ```bash
-# Check if question resulted in a draw
-cast call $VOTING_ADDRESS "isQuestionDraw(uint256)" 1 \
-  --rpc-url http://localhost:8545
-
 # Get detailed results
 cast call $VOTING_ADDRESS "getDetailedVotingResults(uint256)" 1 \
   --rpc-url http://localhost:8545
@@ -136,15 +122,6 @@ cast send $FACTORY_ADDRESS "createMPToken(address,string,string,string,uint256,u
   --private-key $ADMIN_PRIVATE_KEY \
   --rpc-url http://localhost:8545
 ```
-
-## Staking Rules
-
-| Outcome | Stake Return | Vault Earnings |
-|---------|--------------|----------------|
-| Winner | 100% (100 ETH) | 0 ETH |
-| Loser | 50% (50 ETH) | 50% (50 ETH) |
-| Draw | 100% (100 ETH) | 0 ETH |
-
 ## Useful Commands
 
 ### Check balances
@@ -181,7 +158,7 @@ cast call $VOTING_ADDRESS "getStakeInfo(uint256,address)" 1 $YOUR_ADDRESS \
   --rpc-url http://localhost:8545
 ```
 
-## Demo Simulation
+## Demo with python script
 
 Run complete voting simulation:
 ```bash
@@ -245,33 +222,28 @@ voting_simulation.py      # Complete demo simulation
 
 **"Not a valid MP voter"**
 ```bash
-# Check if address has MP token
 cast call $FACTORY_ADDRESS "getMPTokenCount()" --rpc-url http://localhost:8545
 cast call $FACTORY_ADDRESS "getMPTokenData(uint256)" 1 --rpc-url http://localhost:8545
 ```
 
 **"Must stake exactly 100 ETH"**
 ```bash
-# Ensure you include --value 100ether
 cast send $VOTING_ADDRESS "vote(uint256,uint256)" 1 0 --value 100ether --private-key $KEY --rpc-url http://localhost:8545
 ```
 
 **"Voting has not started yet"**
 ```bash
-# Check current timestamp vs question start time
 cast call "block.timestamp" --rpc-url http://localhost:8545
 cast call $VOTING_ADDRESS "getQuestionDetails(uint256)" 1 --rpc-url http://localhost:8545
 ```
 
 **"Already voted"**
 ```bash
-# Check if you already voted
 cast call $VOTING_ADDRESS "checkVote(uint256,address)" 1 $YOUR_ADDRESS --rpc-url http://localhost:8545
 ```
 
 **"Voting has ended"**
 ```bash
-# Check question timing
 cast call $VOTING_ADDRESS "getQuestionDetails(uint256)" 1 --rpc-url http://localhost:8545
 ```
 
