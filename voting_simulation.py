@@ -12,10 +12,10 @@ print("=== DEPLOYING CONTRACTS ===")
 
 
 print("Deploying MPTokenFactory...")
-factory_cmd = f'forge script script/Deploy.sol:DeployMPTokenFactory --rpc-url http://localhost:8545 --private-key {ADMIN_KEY} --broadcast'
+factory_cmd = f'forge script script/Deploy.sol:DeployMPTokenFactory --rpc-url http://localhost:8545 --private-key {ADMIN_KEY} --broadcast 2>/dev/null'
 factory_output = os.popen(factory_cmd).read()
-print("Factory deployment output:")
-print(factory_output)
+#print("Factory deployment output:")
+#print(factory_output)
 
 FACTORY = ""
 for line in factory_output.split('\n'):
@@ -29,22 +29,18 @@ if not FACTORY:
     exit(1)
 
 os.environ["FACTORY_ADDRESS"] = FACTORY
-
 print(f"Factory Address: {FACTORY}")
 
-
-print("Creating MP NFTs...")
-mp_cmd = f"./create_mp_nfts.sh --factory {FACTORY}"
+print("=== Creating MP NFTs ===")
+mp_cmd = f"./create_mp_nfts.sh --factory {FACTORY} 2>/dev/null"
 mp_output = os.popen(mp_cmd).read()
 print("MP NFT Creation output:")
 print(mp_output)
-
 print("Deploying MPVoting...")
-voting_cmd = f'forge script script/DeployMPVoting.sol:DeployMPVoting --rpc-url http://localhost:8545 --private-key {ADMIN_KEY} --broadcast'
+voting_cmd = f'forge script script/DeployMPVoting.sol:DeployMPVoting --rpc-url http://localhost:8545 --private-key {ADMIN_KEY} --broadcast 2>/dev/null'
 voting_output = os.popen(voting_cmd).read()
-print("Voting deployment output:")
-print(voting_output)
-
+#print("Voting deployment output:")
+#print(voting_output)
 
 VOTING_ADDRESS = ""
 for line in voting_output.split('\n'):
@@ -58,7 +54,6 @@ if not VOTING_ADDRESS:
     exit(1)
 
 print(f"Voting Address: {VOTING_ADDRESS}")
-
 def check_balance(address, label):
     balance_wei = os.popen(f'cast balance {address} --rpc-url http://localhost:8545').read().strip()
     balance_eth = int(balance_wei) / 1e18
@@ -87,15 +82,14 @@ questions = [
 ]
 
 for i, question in enumerate(questions, 1):
-    print(f"Creating question {i}: {question}")
+    print(f"Creating question {i}: {question}", end=" ")
     cmd = f'cast send --rpc-url http://localhost:8545 --private-key {ADMIN_KEY} {VOTING_ADDRESS} "createQuestion(string,uint256,uint256)" "{question}" {start_time} {end_time}'
     result = os.popen(cmd).read()
     if "Transaction hash" in result or "blockHash" in result:
-        print(f"Question {i} created successfully")
+        print(f"( Question {i} created successfully )")
     else:
-        print(f"Question {i} creation failed:")
+        print(f"( Question {i} creation failed: )")
         print(result)
-
 print("\n=== INITIAL BALANCES ===")
 initial_balances = {}
 for private_key, address, label in voters:
@@ -104,7 +98,6 @@ admin_initial = check_balance(ADMIN_ADDRESS, "Admin")
 
 print(f"\nWaiting for voting to start (65 seconds)...")
 time.sleep(65)
-
 
 voting_patterns = [
     # Question 1: 3 YES, 2 NO, 1 ABSTAIN
