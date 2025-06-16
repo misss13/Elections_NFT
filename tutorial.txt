@@ -2,7 +2,7 @@
 anvil
 # Uruchomienie lokalnego blockchaina
 
-export PRIVATE_KEY="..."
+export PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 # Ustawienie klucza prywatnego admina
 
 export RPC_URL="http://localhost:8545"
@@ -29,12 +29,12 @@ forge script script/CreateMPTokensForAnvil.sol:CreateMPTokensForAnvil --rpc-url 
 cast call $FACTORY_ADDRESS "getMPTokenCount()" --rpc-url $RPC_URL
 # Sprawdź ile tokenów MP zostało utworzonych
 
-4: Sprawdzenie sald
-cast balance <adres> --rpc-url $RPC_URL --ether
+4: Sprawdzenie sald (0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC)
+cast balance 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC --rpc-url $RPC_URL --ether
 # Sprawdź saldo w ETH (powtórz dla każdego konta)
 
 5: Tworzenie pytań z mechanizmem stakowania
-cast send --rpc-url $RPC_URL --private-key $PRIVATE_KEY $VOTING_ADDRESS "createQuestion(string,uint256,uint256)" "..." <start> <end>
+cast send --rpc-url $RPC_URL --private-key $PRIVATE_KEY $VOTING_ADDRESS "createQuestion(string,uint256,uint256)" "Voting on 7 working day weekend" 1749806049 1749806459
 # Tworzy pytanie do głosowania
 
 cast call $VOTING_ADDRESS "questionCount()" --rpc-url $RPC_URL
