@@ -79,10 +79,6 @@ cast send $VOTING_ADDRESS "closeQuestion(uint256)" 1 --private-key $ADMIN_PRIVAT
 cast send $VOTING_ADDRESS "claimStake(uint256)" 1 --private-key $MP_PRIVATE_KEY --rpc-url $RPC_URL
 ```
 
-## Staking Rules
-- **Winners**: Get 100% stake back
-- **Losers**: Get 50% stake back
-- **Vault**: Question creator gets remaining 50% from losers
 
 ## Project Structure
 
