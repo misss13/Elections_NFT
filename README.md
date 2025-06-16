@@ -214,6 +214,7 @@ script/
 └── CreateMPTokensForAnvil.sol # Local test setup
 
 voting_simulation.py      # Complete demo simulation
+create_mp_nfts.sh         # Generate member of parliments with nft tokens
 ```
 
 ## Troubleshooting
