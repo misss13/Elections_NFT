@@ -184,7 +184,7 @@ cast call $VOTING_ADDRESS "checkVote(uint256,address)" 1 $YOUR_ADDRESS --rpc-url
 ### Debug Commands
 
 ```bash
-cast call "block.timestamp" --rpc-url $RPC_URL
+cast block latest --rpc-url http://localhost:8545 | grep timestamp
 
 cast call $FACTORY_ADDRESS "getMPTokenData(uint256)" 1 --rpc-url $RPC_URL
 
