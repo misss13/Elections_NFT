@@ -66,16 +66,8 @@ Run complete voting simulation:
 python3 voting_simulation.py
 ```
 
-### Option 2: Manual Step-by-Step (Recommended for Learning)
-Follow the comprehensive tutorial for detailed understanding:
-
-**See `tutorial.md` for complete step-by-step instructions including:**
-- Creating voting questions with dynamic timestamps
-- MP voting with proper staking
-- Monitoring vote progress
-- Claiming stakes after voting ends
-- Error demonstrations and debugging
-- Admin functions
+### Option 2: Manual Step-by-Step
+**See `tutorial.md` for complete step-by-step instructions**
 
 Key commands from tutorial:
 
@@ -138,18 +130,11 @@ script/
 ├── DeployMPVoting.sol    # Voting deployment
 └── CreateMPTokensForAnvil.sol # Local test setup
 
-tutorial.md               # Complete step-by-step tutorial
+tutorial.md               # Step-by-step tutorial
 voting_simulation.py      # Automated demo simulation
 create_mp_nfts.sh         # Generate MP NFT tokens
 ```
 
-## Staking Mechanism
-
-- **Stake Required**: 100 ETH per vote
-- **Winners**: Get 100% stake back
-- **Losers**: Get 50% stake back
-- **Vault**: Receives remaining 50% from losing stakes
-- **Draw**: All voters get 100% stake back
 
 ## Monitoring Commands
 
@@ -216,4 +201,4 @@ cast balance $ADDRESS --rpc-url $RPC_URL --ether
 - **`src/`** - Smart contract documentation in code comments
 - **`test/`** - Test cases with usage examples
 
-For a comprehensive understanding of the system, start with `tutorial.md` which provides detailed explanations and real examples of each feature.
+`tutorial.md` provides detailed explanations and real examples of each feature.
