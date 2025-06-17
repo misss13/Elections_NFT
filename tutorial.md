@@ -30,8 +30,7 @@ export VOTING_ADDRESS="0xc6e7DF5E7b4f2A278906862b61205850344D4e7d"
 
 ## 3: Create MP NFTs
 ```bash
-forge script script/CreateMPTokensForAnvil.sol:CreateMPTokensForAnvil --rpc-url $RPC_URL --broadcast
-# Creates MP NFTs for test accounts
+bash ./create_mp_nfts.sh
 
 cast call $FACTORY_ADDRESS "getMPTokenCount()" --rpc-url $RPC_URL
 # Check how many MP tokens were created
@@ -71,17 +70,17 @@ echo "Voting period is now active!"
 CRITICAL: Each vote requires exactly 100 ETH stake!
 
 ```bash
-# MP Account 1 votes YES (option 0)
+# MP Account 1 
 export MP1_KEY="0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
 cast send --rpc-url $RPC_URL --private-key $MP1_KEY $VOTING_ADDRESS \
   "vote(uint256,uint256)" "1" "0" --value 100ether
 
-# MP Account 2 votes NO (option 1)
+# MP Account 2 
 export MP2_KEY="0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
 cast send --rpc-url $RPC_URL --private-key $MP2_KEY $VOTING_ADDRESS \
   "vote(uint256,uint256)" "1" "1" --value 100ether
 
-# MP Account 3 abstains (option 2)
+# MP Account 3 
 export MP3_KEY="0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"
 cast send --rpc-url $RPC_URL --private-key $MP3_KEY $VOTING_ADDRESS \
   "vote(uint256,uint256)" "1" "2" --value 100ether
@@ -95,7 +94,7 @@ cast call $VOTING_ADDRESS "getYesVotesCount(uint256)" "1" --rpc-url $RPC_URL
 # Check NO votes  
 cast call $VOTING_ADDRESS "getNoVotesCount(uint256)" "1" --rpc-url $RPC_URL
 
-# Check all vote counts [YES, NO, ABSTAIN]
+# Check all vote counts
 cast call $VOTING_ADDRESS "getAllVoteCounts(uint256)" "1" --rpc-url $RPC_URL
 
 # Check total staked amount
@@ -107,9 +106,6 @@ cast call $VOTING_ADDRESS "getStakeInfo(uint256,address)" "1" "0x70997970C51812d
 
 ## 9: Wait and Close Voting
 ```bash
-echo "Waiting for voting period to end..."
-sleep 480  # Wait remaining time
-
 # Close the question (admin only)
 cast send --rpc-url $RPC_URL --private-key $PRIVATE_KEY $VOTING_ADDRESS \
   "closeQuestion(uint256)" "1"
@@ -134,7 +130,6 @@ Staking Rules:
 - Remaining 50% from losers goes to vault (question creator)
 
 ```bash
-# Each MP claims their stake
 cast send --rpc-url $RPC_URL --private-key $MP1_KEY $VOTING_ADDRESS "claimStake(uint256)" "1"
 cast send --rpc-url $RPC_URL --private-key $MP2_KEY $VOTING_ADDRESS "claimStake(uint256)" "1"  
 cast send --rpc-url $RPC_URL --private-key $MP3_KEY $VOTING_ADDRESS "claimStake(uint256)" "1"
@@ -171,7 +166,6 @@ cast call $VOTING_ADDRESS "isValidMPVoter(address)" "0x70997970C51812dc3A010C7d0
 
 ## 14: Final Balance Summary
 ```bash
-echo "=== Final Balances ==="
 cast balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --rpc-url $RPC_URL --ether  # Admin/Vault
 cast balance 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 --rpc-url $RPC_URL --ether  # MP1
 cast balance 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC --rpc-url $RPC_URL --ether  # MP2
