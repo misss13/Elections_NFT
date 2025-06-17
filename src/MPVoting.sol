@@ -136,7 +136,7 @@ contract MPVoting is AccessControl, ReentrancyGuard {
         emit VoteCast(_questionId, msg.sender, _optionIndex, msg.value);
     }
     
-    function closeQuestion(uint256 _questionId) public onlyAdmin {
+    function closeQuestion(uint256 _questionId) public {
         require(_questionId <= questionCount && _questionId > 0, "Invalid question ID");
         Question storage q = questions[_questionId];
         require(q.isActive, "Question already inactive");
