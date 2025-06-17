@@ -3,29 +3,23 @@
 ## 1: Environment Setup
 ```bash
 anvil
-# Start local blockchain
 
 export PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb378cbed5efcae784d7bf4f2ff80"
-# Set admin private key
 
 export RPC_URL="http://localhost:8545"
-# Set RPC URL
+
 ```
 
 ## 2: Deploy Contracts
 ```bash
 forge script script/Deploy.sol:DeployMPTokenFactory --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast
-# Deploy MP token factory
 
 export FACTORY_ADDRESS="0x5FbDB2315678afecb367f032d93F642f64180aa3"
-# Set factory address from output
 
 export MP_FACTORY_ADDRESS=$FACTORY_ADDRESS
 forge script script/DeployMPVoting.sol:DeployMPVoting --rpc-url $RPC_URL --broadcast
-# Deploy voting contract
 
 export VOTING_ADDRESS="0xc6e7DF5E7b4f2A278906862b61205850344D4e7d"
-# Set voting address from output
 ```
 
 ## 3: Create MP NFTs
@@ -33,7 +27,6 @@ export VOTING_ADDRESS="0xc6e7DF5E7b4f2A278906862b61205850344D4e7d"
 bash ./create_mp_nfts.sh
 
 cast call $FACTORY_ADDRESS "getMPTokenCount()" --rpc-url $RPC_URL
-# Check how many MP tokens were created
 ```
 
 ## 4: Check Account Balances
