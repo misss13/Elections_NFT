@@ -30,7 +30,7 @@ forge install
 forge build
 ```
 
-## Local Development
+## Quick Start
 
 ### Terminal 1: Start blockchain
 ```bash
@@ -40,39 +40,69 @@ anvil
 ### Terminal 2: Deploy contracts
 ```bash
 export PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+export RPC_URL="http://localhost:8545"
 
 # Deploy MP Token Factory
 forge script script/Deploy.sol:DeployMPTokenFactory \
-  --rpc-url http://localhost:8545 \
+  --rpc-url $RPC_URL \
   --private-key $PRIVATE_KEY \
   --broadcast
 
-# Set factory address
+# Set factory address from deployment output
 export FACTORY_ADDRESS="0x5FbDB2315678afecb367f032d93F642f64180aa3"
 
 # Deploy Voting Contract
 forge script script/DeployMPVoting.sol:DeployMPVoting \
-  --rpc-url http://localhost:8545 \
+  --rpc-url $RPC_URL \
   --private-key $PRIVATE_KEY \
   --broadcast
 
-# Set voting address 
+# Set voting address from deployment output
 export VOTING_ADDRESS="0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+
+# Create MP NFTs for test accounts
+forge script script/CreateMPTokensForAnvil.sol:CreateMPTokensForAnvil \
+  --rpc-url $RPC_URL \
+  --broadcast
 ```
 
-## Demo with python script
+## Demo Options
 
+### Option 1: Python Script (Automated)
 Run complete voting simulation:
 ```bash
 python3 voting_simulation.py
 ```
 
-This script will:
-- Deploy all contracts
-- Create MP tokens for test accounts
-- Create 4 voting questions (including one draw scenario)
-- Simulate voting with different patterns
-- Demonstrate stake claiming
+### Option 2: Manual Step-by-Step (Recommended for Learning)
+Follow the comprehensive tutorial for detailed understanding:
+
+**See `tutorial.md` for complete step-by-step instructions including:**
+- Creating voting questions with dynamic timestamps
+- MP voting with proper staking
+- Monitoring vote progress
+- Claiming stakes after voting ends
+- Error demonstrations and debugging
+- Admin functions
+
+Key commands from tutorial:
+
+```bash
+START_TIME=$(($(date +%s) + 120))
+END_TIME=$(($(date +%s) + 600))
+cast send --rpc-url $RPC_URL --private-key $PRIVATE_KEY $VOTING_ADDRESS \
+  "createQuestion(string,uint256,uint256)" \
+  "Should we implement a 7-day working week?" \
+  $START_TIME $END_TIME
+
+export MP1_KEY="0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+cast send --rpc-url $RPC_URL --private-key $MP1_KEY $VOTING_ADDRESS \
+  "vote(uint256,uint256)" "1" "0" --value 100ether
+
+cast call $VOTING_ADDRESS "getAllVoteCounts(uint256)" "1" --rpc-url $RPC_URL
+
+cast send --rpc-url $RPC_URL --private-key $MP1_KEY $VOTING_ADDRESS "claimStake(uint256)" "1"
+```
 
 ## Testing
 
@@ -97,6 +127,7 @@ Create `.env` file:
 PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 FACTORY_ADDRESS=0x5FbDB2315678afecb367f032d93F642f64180aa3
 VOTING_ADDRESS=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+RPC_URL=http://localhost:8545
 ```
 
 ## Project Structure
@@ -115,59 +146,82 @@ script/
 ├── DeployMPVoting.sol    # Voting deployment
 └── CreateMPTokensForAnvil.sol # Local test setup
 
-voting_simulation.py      # Complete demo simulation
-create_mp_nfts.sh         # Generate member of parliments with nft tokens
+tutorial.md               # Complete step-by-step tutorial
+voting_simulation.py      # Automated demo simulation
+create_mp_nfts.sh         # Generate MP NFT tokens
+```
+
+## Staking Mechanism
+
+- **Stake Required**: 100 ETH per vote
+- **Winners**: Get 100% stake back
+- **Losers**: Get 50% stake back
+- **Vault**: Receives remaining 50% from losing stakes
+- **Draw**: All voters get 100% stake back
+
+## Monitoring Commands
+
+```bash
+cast call $FACTORY_ADDRESS "getMPTokenCount()" --rpc-url $RPC_URL
+
+cast call $VOTING_ADDRESS "isValidMPVoter(address)" $ADDRESS --rpc-url $RPC_URL
+
+cast call $VOTING_ADDRESS "questionCount()" --rpc-url $RPC_URL
+
+cast call $VOTING_ADDRESS "getActiveQuestions()" --rpc-url $RPC_URL
+
+cast call $VOTING_ADDRESS "getYesVotesCount(uint256)" "1" --rpc-url $RPC_URL
+cast call $VOTING_ADDRESS "getNoVotesCount(uint256)" "1" --rpc-url $RPC_URL
+
+cast call $VOTING_ADDRESS "getStakeInfo(uint256,address)" "1" $ADDRESS --rpc-url $RPC_URL
+
+cast call $VOTING_ADDRESS "getVotingResults(uint256)" "1" --rpc-url $RPC_URL
 ```
 
 ## Troubleshooting
 
-### Common Errors
+### Common Errors and Solutions
 
 **"Not a valid MP voter"**
 ```bash
-cast call $FACTORY_ADDRESS "getMPTokenCount()" --rpc-url http://localhost:8545
-cast call $FACTORY_ADDRESS "getMPTokenData(uint256)" 1 --rpc-url http://localhost:8545
+cast call $VOTING_ADDRESS "isValidMPVoter(address)" $YOUR_ADDRESS --rpc-url $RPC_URL
+cast call $FACTORY_ADDRESS "getMPTokenData(uint256)" 1 --rpc-url $RPC_URL
 ```
 
 **"Must stake exactly 100 ETH"**
 ```bash
-cast send $VOTING_ADDRESS "vote(uint256,uint256)" 1 0 --value 100ether --private-key $KEY --rpc-url http://localhost:8545
+cast send $VOTING_ADDRESS "vote(uint256,uint256)" 1 0 --value 100ether --private-key $KEY --rpc-url $RPC_URL
 ```
 
-**"Voting has not started yet"**
+**"Voting has not started yet" / "Voting has ended"**
 ```bash
-cast call "block.timestamp" --rpc-url http://localhost:8545
-cast call $VOTING_ADDRESS "getQuestionDetails(uint256)" 1 --rpc-url http://localhost:8545
+cast call $VOTING_ADDRESS "getQuestionDetails(uint256)" 1 --rpc-url $RPC_URL
+cast call "block.timestamp" --rpc-url $RPC_URL
 ```
 
 **"Already voted"**
 ```bash
-cast call $VOTING_ADDRESS "checkVote(uint256,address)" 1 $YOUR_ADDRESS --rpc-url http://localhost:8545
-```
-
-**"Voting has ended"**
-```bash
-cast call $VOTING_ADDRESS "getQuestionDetails(uint256)" 1 --rpc-url http://localhost:8545
+cast call $VOTING_ADDRESS "checkVote(uint256,address)" 1 $YOUR_ADDRESS --rpc-url $RPC_URL
 ```
 
 ### Debug Commands
 
 ```bash
-# Check MP token count
-cast call $FACTORY_ADDRESS "getMPTokenCount()" --rpc-url http://localhost:8545
+cast call "block.timestamp" --rpc-url $RPC_URL
 
-# Check token details
-cast call $FACTORY_ADDRESS "getMPTokenData(uint256)" 1 --rpc-url http://localhost:8545
+cast call $FACTORY_ADDRESS "getMPTokenData(uint256)" 1 --rpc-url $RPC_URL
 
-# Check if token expired
-cast call $FACTORY_ADDRESS "isTokenExpired(uint256)" 1 --rpc-url http://localhost:8545
+cast call $FACTORY_ADDRESS "isTokenExpired(uint256)" 1 --rpc-url $RPC_URL
 
-# Check current block timestamp
-cast call "block.timestamp" --rpc-url http://localhost:8545
+cast call $VOTING_ADDRESS "getQuestionDetails(uint256)" 1 --rpc-url $RPC_URL
 
-# Check question count
-cast call $VOTING_ADDRESS "questionCount()" --rpc-url http://localhost:8545
-
-# Check active questions
-cast call $VOTING_ADDRESS "getActiveQuestions()" --rpc-url http://localhost:8545
+cast balance $ADDRESS --rpc-url $RPC_URL --ether
 ```
+
+## Documentation
+
+- **`tutorial.md`** - Complete step-by-step tutorial with examples
+- **`src/`** - Smart contract documentation in code comments
+- **`test/`** - Test cases with usage examples
+
+For a comprehensive understanding of the system, start with `tutorial.md` which provides detailed explanations and real examples of each feature.
