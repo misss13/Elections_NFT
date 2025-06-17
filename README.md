@@ -2,13 +2,6 @@
 
 Blockchain-based voting system for Members of Parliament using NFT identity verification and ETH staking mechanisms.
 
-## Overview
-
-This system enables secure voting by MPs through:
-- NFT Identity Verification: Each MP receives a unique NFT token with their details
-- Staking Mechanism: 100 ETH stake required per vote
-- Transparent Results: All votes recorded on-chain
-- Stake Distribution: Winners get full stake back, losers get 50% back (50% goes to vault)
 
 ## Prerequisites
 
@@ -26,7 +19,6 @@ anvil --version
 ```bash
 git clone <repository-url>
 cd Elections_NFT
-forge install
 forge build
 ```
 
